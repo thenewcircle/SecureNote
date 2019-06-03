@@ -1,13 +1,13 @@
 package com.example.android.securenote
+import kotlinx.android.synthetic.main.secure_note.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.withContext
 
-import java.io.InputStream
-import java.io.OutputStream
 
-import android.annotation.SuppressLint
-import android.app.Activity
-import android.app.AlertDialog
-import android.content.DialogInterface
-import android.os.AsyncTask
+import android.content.Context
+
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -16,43 +16,26 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.view.View.OnClickListener
-import android.widget.Button
-import android.widget.EditText
-import android.widget.RadioGroup
-import android.widget.TextView
+
 import android.widget.Toast
 
 import com.example.android.securenote.crypto.PasswordEncryptor
 import com.example.android.securenote.crypto.RSAHardwareEncryptor
 
-class SecureNoteActivity : Activity(), OnClickListener, TextWatcher, GetPasswordDialog.OnPasswordListener {
+class SecureNoteActivity : androidx.appcompat.app.AppCompatActivity(), OnClickListener, TextWatcher, GetPasswordDialog.OnPasswordListener {
+    private lateinit var hardwareEncryptor: RSAHardwareEncryptor
 
-    private var noteText: EditText? = null
-    private var resultText: TextView? = null
-    private var encryptionSelect: RadioGroup? = null
-    private var saveButton: Button? = null
-
-    private var passwordEncryptor: PasswordEncryptor? = null
-    private var hardwareEncryptor: RSAHardwareEncryptor? = null
-
-    private val isSecureNoteFilePresent: Boolean
-        get() = getFileStreamPath(FILENAME).exists()
+    private val isSecureNoteFilePresent: Boolean get() = getFileStreamPath(FILENAME).exists()
 
     public override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.secure_note)
 
-        noteText = findViewById(R.id.note_text)
-        resultText = findViewById(R.id.text_result)
-        encryptionSelect = findViewById(R.id.type_select)
-        saveButton = findViewById(R.id.save_button)
+        load_button.setOnClickListener(this)
+        save_button.setOnClickListener(this)
+        note_text.addTextChangedListener(this)
+        note_text.text = null
 
-        findViewById<View>(R.id.load_button).setOnClickListener(this)
-        saveButton!!.setOnClickListener(this)
-        noteText!!.addTextChangedListener(this)
-        noteText!!.text = null
-
-        passwordEncryptor = PasswordEncryptor()
         hardwareEncryptor = RSAHardwareEncryptor(this)
     }
 
@@ -67,18 +50,18 @@ class SecureNoteActivity : Activity(), OnClickListener, TextWatcher, GetPassword
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
+        return when (item.itemId) {
             R.id.delete_button -> {
-                AlertDialog.Builder(this)
+                androidx.appcompat.app.AlertDialog.Builder(this)
                         .setMessage(R.string.delete_alert)
                         .setCancelable(false)
                         .setPositiveButton(android.R.string.yes
-                        ) { dialog, id -> deleteSecureNote() }
+                        ) { _, _ -> deleteSecureNote() }
                         .setNegativeButton(android.R.string.no, null)
                         .show()
-                return true
+                true
             }
-            else -> return super.onOptionsItemSelected(item)
+            else -> super.onOptionsItemSelected(item)
         }
     }
 
@@ -86,8 +69,7 @@ class SecureNoteActivity : Activity(), OnClickListener, TextWatcher, GetPassword
         Log.d(TAG, "Getting password")
         val dialog = GetPasswordDialog.newInstance(requestCode,
                 6, verifyPasswords)
-        dialog.show(fragmentManager,
-                GetPasswordDialog::class.java.simpleName)
+        dialog.show(supportFragmentManager, GetPasswordDialog::class.java.simpleName)
     }
 
     override fun onPasswordValid(requestType: Int, password: String) {
@@ -102,7 +84,7 @@ class SecureNoteActivity : Activity(), OnClickListener, TextWatcher, GetPassword
     }
 
     override fun onClick(v: View) {
-        val encryptionType = encryptionSelect!!.checkedRadioButtonId
+        val encryptionType = type_select.checkedRadioButtonId
         when (v.id) {
             R.id.load_button -> if (encryptionType == R.id.type_password) {
                 getPassword(GET_PASSWORD_FOR_LOAD, false)
@@ -120,7 +102,7 @@ class SecureNoteActivity : Activity(), OnClickListener, TextWatcher, GetPassword
 
     override fun onDestroy() {
         super.onDestroy()
-        noteText!!.text.clear()
+        note_text.text.clear()
     }
 
     private fun deleteSecureNote() {
@@ -134,73 +116,62 @@ class SecureNoteActivity : Activity(), OnClickListener, TextWatcher, GetPassword
         }
     }
 
-    @SuppressLint("StaticFieldLeak")
+
     private fun saveSecureNote(passkey: String?) {
         Log.d(TAG, "Saving note")
-        object : AsyncTask<String, Void, Boolean>() {
-            override fun doInBackground(vararg strings: String): Boolean? {
-                try {
-                    val out = openFileOutput(FILENAME, Context.MODE_PRIVATE)
-                    val noteData = strings[0].toByteArray()
-                    if (passkey == null) {
-                        hardwareEncryptor!!.encryptData(noteData, out)
-                    } else {
-                        passwordEncryptor!!.encryptData(passkey, noteData, out)
-                    }
-                    Log.d(TAG, "Saved note to $FILENAME")
+        val noteData = note_text.text.toString().toByteArray()
+        GlobalScope.async {
+            try {
+                val out = openFileOutput(FILENAME, Context.MODE_PRIVATE)
 
-                    return true
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to save note to $FILENAME", e)
-                    getFileStreamPath(FILENAME).delete()
-                    return false
-                }
-
-            }
-
-            override fun onPostExecute(result: Boolean?) {
-                if (result!!) {
-                    noteText!!.text.clear()
-                    toast(R.string.saved_note)
+                if (passkey == null) {
+                    hardwareEncryptor.encryptData(noteData, out)
                 } else {
+                    PasswordEncryptor.encryptData(passkey, noteData, out)
+                }
+                Log.d(TAG, "Saved note to $FILENAME")
+                withContext(Dispatchers.Main) {
+                    note_text.text.clear()
+                    toast(R.string.saved_note)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to save note to $FILENAME", e)
+                getFileStreamPath(FILENAME).delete()
+                withContext(Dispatchers.Main) {
                     toast(R.string.failed_to_save)
                 }
             }
-
-        }.execute(noteText!!.text.toString())
+        }
     }
 
-    @SuppressLint("StaticFieldLeak")
     private fun loadSecureNote(passkey: String?) {
         Log.d(TAG, "Loading note...")
-        object : AsyncTask<Void, Void, String>() {
-            override fun doInBackground(vararg params: Void): String? {
-                try {
-                    val `in` = openFileInput(FILENAME)
-                    val decrypted: ByteArray
-                    if (passkey == null) {
-                        decrypted = hardwareEncryptor!!.decryptData(`in`)
-                    } else {
-                        decrypted = passwordEncryptor!!.decryptData(passkey, `in`)
+        GlobalScope.async {
+            try {
+                val input = openFileInput(FILENAME)
+                val decrypted: ByteArray? =
+                        if (passkey == null) {
+                            hardwareEncryptor.decryptData(input)
+                        } else {
+                            PasswordEncryptor.decryptData(passkey, input)
+                        }
+                if (decrypted == null) {
+                    Log.e(TAG, "Failed to decrypt note from $FILENAME")
+                    withContext(Dispatchers.Main) {
+                        toast(R.string.failed_to_load)
                     }
-                    Log.d(TAG, "Loaded note from $FILENAME")
-                    return String(decrypted)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to load note from $FILENAME", e)
-                    return null
-                }
-
-            }
-
-            override fun onPostExecute(result: String?) {
-                if (result == null) {
-                    toast(R.string.failed_to_load)
                 } else {
-                    resultText!!.text = result
-                    toast(R.string.loaded_note)
+                    Log.d(TAG, "Loaded note from $FILENAME")
+                    withContext(Dispatchers.Main) {
+                        text_result.text = String(decrypted)
+                        toast(R.string.loaded_note)
+                    }
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load note from $FILENAME", e)
             }
-        }.execute()
+
+        }
     }
 
     private fun toast(resId: Int) {
@@ -208,20 +179,22 @@ class SecureNoteActivity : Activity(), OnClickListener, TextWatcher, GetPassword
     }
 
     override fun afterTextChanged(s: Editable) {
-        saveButton!!.isEnabled = s.length != 0
+        save_button.isEnabled = s.isNotEmpty()
     }
 
-    override fun beforeTextChanged(s: CharSequence, start: Int, count: Int, after: Int) {}
+    override fun beforeTextChanged(s: CharSequence, start: Int, count: Int, after: Int) {
+    }
 
-    override fun onTextChanged(s: CharSequence, start: Int, before: Int, count: Int) {}
+    override fun onTextChanged(s: CharSequence, start: Int, before: Int, count: Int) {
+    }
 
     companion object {
         private val TAG = SecureNoteActivity::class.java.simpleName
 
-        private val FILENAME = "secure.note"
+        private const val FILENAME = "secure.note"
 
         /* Password Activity Actions */
-        private val GET_PASSWORD_FOR_LOAD = 1
-        private val GET_PASSWORD_FOR_SAVE = 2
+        private const val GET_PASSWORD_FOR_LOAD = 1
+        private const val GET_PASSWORD_FOR_SAVE = 2
     }
 }
