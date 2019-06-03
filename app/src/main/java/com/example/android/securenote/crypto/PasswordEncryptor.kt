@@ -1,17 +1,14 @@
 package com.example.android.securenote.crypto
 
 import android.util.Base64
-
 import java.io.IOException
 import java.io.InputStream
 import java.io.InputStreamReader
 import java.io.OutputStream
 import java.security.GeneralSecurityException
-import java.security.Key
 import java.security.NoSuchAlgorithmException
 import java.security.SecureRandom
 import java.security.spec.InvalidKeySpecException
-import java.security.spec.KeySpec
 
 import javax.crypto.Cipher
 import javax.crypto.SecretKey
@@ -20,14 +17,14 @@ import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.PBEKeySpec
 import javax.crypto.spec.SecretKeySpec
 
-class PasswordEncryptor {
+object PasswordEncryptor {
+    private const val ENCRYPTION_ALGORITHM = "AES/CBC/PKCS5Padding"
+    private const val KEY_LENGTH = 256
+    private const val SALT_LENGTH = KEY_LENGTH / 8
+    private const val DELIMITER = "&"
 
-    private val secureRandom: SecureRandom
-
-    init {
-        // Do *not* seed secureRandom! Automatically seeded from system entropy.
-        secureRandom = SecureRandom()
-    }
+    // Do *not* seed secureRandom! Automatically seeded from system entropy.
+    private val secureRandom: SecureRandom = SecureRandom()
 
     /**
      * Return a cipher text blob of encrypted data, Base64 encoded.
@@ -109,19 +106,12 @@ class PasswordEncryptor {
         val sb = StringBuilder()
 
         val inputBuffer = CharArray(2048)
-        var read: Int
-        while ((read = reader.read(inputBuffer)) != -1) {
+        var read: Int = reader.read(inputBuffer)
+        while (read != -1) {
             sb.append(inputBuffer, 0, read)
+            read = reader.read(inputBuffer)
         }
 
         return sb.toString()
-    }
-
-    companion object {
-
-        private val ENCRYPTION_ALGORITHM = "AES/CBC/PKCS5Padding"
-        private val KEY_LENGTH = 256
-        private val SALT_LENGTH = KEY_LENGTH / 8
-        private val DELIMITER = "&"
     }
 }

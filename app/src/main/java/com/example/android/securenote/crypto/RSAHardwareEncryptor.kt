@@ -2,7 +2,10 @@ package com.example.android.securenote.crypto
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.Build
 import android.security.KeyPairGeneratorSpec
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
 import android.util.Base64
 import android.util.Base64InputStream
 import android.util.Base64OutputStream
@@ -13,18 +16,10 @@ import java.io.InputStream
 import java.io.InputStreamReader
 import java.io.OutputStream
 import java.math.BigInteger
-import java.security.GeneralSecurityException
-import java.security.Key
-import java.security.KeyFactory
-import java.security.KeyPair
-import java.security.KeyPairGenerator
-import java.security.KeyStore
-import java.security.NoSuchAlgorithmException
-import java.security.PublicKey
+import java.security.*
 import java.security.spec.InvalidKeySpecException
 import java.security.spec.X509EncodedKeySpec
 import java.util.Calendar
-import java.util.Date
 
 import javax.crypto.Cipher
 import javax.crypto.CipherInputStream
@@ -33,11 +28,10 @@ import javax.security.auth.x500.X500Principal
 
 class RSAHardwareEncryptor(context: Context) {
 
-    private val publicKeyStore: SharedPreferences
+    private val publicKeyStore: SharedPreferences = context.getSharedPreferences(
+            "publickey.store", Context.MODE_PRIVATE)
 
     init {
-        publicKeyStore = context.getSharedPreferences(
-                "publickey.store", Context.MODE_PRIVATE)
         try {
             if (!publicKeyStore.contains(KEY_PUBLIC)) {
                 generatePrivateKey(context)
@@ -48,7 +42,6 @@ class RSAHardwareEncryptor(context: Context) {
         } catch (e: Exception) {
             throw RuntimeException("Unable to generate key material.")
         }
-
     }
 
     /**
@@ -58,8 +51,8 @@ class RSAHardwareEncryptor(context: Context) {
      * @throws IOException
      */
     @Throws(GeneralSecurityException::class, IOException::class)
-    fun encryptData(data: ByteArray, out: OutputStream) {
-        var out = out
+    fun encryptData(data: ByteArray, outputStream: OutputStream) {
+        var out = outputStream
         val key = retrievePublicKey()
         val cipher = Cipher.getInstance(ENCRYPTION_ALGORITHM)
         cipher.init(Cipher.ENCRYPT_MODE, key)
@@ -84,18 +77,18 @@ class RSAHardwareEncryptor(context: Context) {
      * @throws IOException
      */
     @Throws(GeneralSecurityException::class, IOException::class)
-    fun decryptData(`in`: InputStream): ByteArray {
-        var `in` = `in`
+    fun decryptData(inputStream: InputStream): ByteArray {
+        var input = inputStream
         val key = retrievePrivateKey()
         val cipher = Cipher.getInstance(ENCRYPTION_ALGORITHM)
         cipher.init(Cipher.DECRYPT_MODE, key)
 
         //Decode input from file
-        `in` = Base64InputStream(`in`, Base64.NO_WRAP)
+        input = Base64InputStream(input, Base64.NO_WRAP)
         //Decrypt input from decoder
-        `in` = CipherInputStream(`in`, cipher)
+        input = CipherInputStream(input, cipher)
 
-        return readFile(`in`).toByteArray()
+        return readFile(input).toByteArray(Charsets.UTF_8)
     }
 
     @Throws(NoSuchAlgorithmException::class, InvalidKeySpecException::class)
@@ -129,13 +122,23 @@ class RSAHardwareEncryptor(context: Context) {
         val end = cal.time
 
         val kpg = KeyPairGenerator.getInstance(KEY_ALGORITHM, PROVIDER_NAME)
-        kpg.initialize(KeyPairGeneratorSpec.Builder(context)
-                .setAlias(KEY_ALIAS)
-                .setStartDate(now)
-                .setEndDate(end)
-                .setSerialNumber(BigInteger.valueOf(1))
-                .setSubject(X500Principal("CN=$KEY_ALIAS"))
-                .build())
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            kpg.initialize(KeyGenParameterSpec.Builder(KEY_ALIAS, KeyProperties.PURPOSE_SIGN)
+                    .setKeyValidityStart(now)
+                    .setKeyValidityEnd(end)
+                    .setCertificateSerialNumber(BigInteger.valueOf(1))
+                    .setCertificateSubject(X500Principal("CN=$KEY_ALIAS"))
+                    .build())
+        } else {
+            @Suppress("DEPRECATION")
+            kpg.initialize(KeyPairGeneratorSpec.Builder(context)
+                    .setAlias(KEY_ALIAS)
+                    .setStartDate(now)
+                    .setEndDate(end)
+                    .setSerialNumber(BigInteger.valueOf(1))
+                    .setSubject(X500Principal("CN=$KEY_ALIAS"))
+                    .build())
+        }
 
         //Generate and bind the private key to hardware
         val kp = kpg.generateKeyPair()
@@ -147,26 +150,27 @@ class RSAHardwareEncryptor(context: Context) {
     }
 
     @Throws(IOException::class)
-    private fun readFile(`in`: InputStream): String {
-        val reader = InputStreamReader(`in`)
+    private fun readFile(input: InputStream): String {
+        val reader = InputStreamReader(input)
         val sb = StringBuilder()
 
         val inputBuffer = CharArray(2048)
-        var read: Int
-        while ((read = reader.read(inputBuffer)) != -1) {
+        var read: Int = reader.read(inputBuffer)
+        while (read != -1) {
             sb.append(inputBuffer, 0, read)
+            read = reader.read(inputBuffer)
         }
 
         return sb.toString()
     }
 
     companion object {
-        private val TAG = RSAHardwareEncryptor::class.java.simpleName
-        private val PROVIDER_NAME = "AndroidKeyStore"
-        private val KEY_ALGORITHM = "RSA"
-        private val ENCRYPTION_ALGORITHM = "RSA/ECB/PKCS1Padding"
+        private val TAG = "RSAHardwareEncryptor"
+        private const val PROVIDER_NAME = "AndroidKeyStore"
+        private const val KEY_ALGORITHM = "RSA"
+        private const val ENCRYPTION_ALGORITHM = "RSA/ECB/PKCS1Padding"
 
-        private val KEY_PUBLIC = "publickey"
-        private val KEY_ALIAS = "secureKeyAlias"
+        private const val KEY_PUBLIC = "publickey"
+        private const val KEY_ALIAS = "secureKeyAlias"
     }
 }
