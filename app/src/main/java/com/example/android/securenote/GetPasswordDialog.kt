@@ -1,7 +1,5 @@
 package com.example.android.securenote
 
-import android.app.Activity
-import android.content.ContentValues.TAG
 import kotlinx.android.synthetic.main.get_password.*
 import kotlinx.android.synthetic.main.get_password.view.*
 
