@@ -22,7 +22,7 @@ class GetPasswordDialog : androidx.fragment.app.DialogFragment(), OnClickListene
         fun onPasswordCancel()
     }
 
-    override fun onAttach(context: Context?) {
+    override fun onAttach(context: Context) {
         super.onAttach(context)
         try {
             passwordListener = context as OnPasswordListener
@@ -32,7 +32,7 @@ class GetPasswordDialog : androidx.fragment.app.DialogFragment(), OnClickListene
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
-        dialog.setTitle(R.string.get_password_label)
+        dialog?.setTitle(R.string.get_password_label)
         val content = inflater.inflate(R.layout.get_password, container, false)
 
         content.cancel_button.setOnClickListener(this)

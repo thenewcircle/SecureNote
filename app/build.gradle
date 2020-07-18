@@ -3,12 +3,12 @@ apply plugin: 'kotlin-android-extensions'
 apply plugin: 'kotlin-android'
 
 android {
-    compileSdkVersion 28
+    compileSdkVersion 29
 
     defaultConfig {
         applicationId "com.example.android.securenote"
         minSdkVersion 19
-        targetSdkVersion 28
+        targetSdkVersion 29
     }
 
     buildTypes {
@@ -27,7 +27,7 @@ repositories {
 }
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
-    implementation 'androidx.appcompat:appcompat:1.0.2'
-    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.2.0'
-    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.2.0'
+    implementation 'androidx.appcompat:appcompat:1.1.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.3.8'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.3.8'
 }
